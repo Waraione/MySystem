@@ -2,7 +2,8 @@ import { Component, OnInit, inject, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router'; 
-import { DataService } from '../../services/data'; 
+import { DataService } from '../../services/data';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'app-dashboard',
@@ -178,27 +179,32 @@ import { DataService } from '../../services/data';
               </div>
             </section>  
 
-            <section class="bento-card unified-full-card">
-              <h3 class="card-title">📜 Transaction Log</h3>
-              <p class="chart-subtitle">Real-time narrative audit of financial transaction executions.</p>
-              <div class="ledger-list">
-                <div *ngFor="let l of logs$ | async" class="ledger-item">
-                  <div class="ledger-details">
-                    <span class="ledger-name">👤 {{ l.residentName }}</span>
-                    <span class="ledger-narrative-text">
-                      ⚡ Transmitted <strong class="highlight-text">₱{{ l.amount }}</strong> via {{ l.method }}
-                    </span>
-                    <span class="ledger-staff">Authorized Node Operator: <strong>{{ l.staff || 'Sys_Admin_Alpha' }}</strong></span>
-                  </div>
-                  <div class="ledger-meta">
-                    <span class="ledger-badge-status">SUCCESS</span>
-                    <span class="ledger-time">{{ l.timestamp | date:'shortTime' }}</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-        </div>
+<section class="bento-card unified-full-card">
+  <h3 class="card-title">📜 Transaction Log</h3>
+  <p class="chart-subtitle">Real-time narrative audit of financial transaction executions.</p>
+  
+  <div class="ledger-list" *ngIf="logs$ | async as logList">
+    <div *ngFor="let l of sortLatestFirst(logList)" class="log-item">
+
+      <div class="ledger-details">
+        <span class="ledger-name">👤 {{ l.residentName || 'Unknown Beneficiary' }}</span>
+        <span class="ledger-narrative-text">
+          ⚡ Transmitted <strong class="highlight-text">₱{{ l.amount || 0 }}</strong> via {{ l.method || 'System Transfer' }}
+        </span>
+        <span class="ledger-staff">Authorized Node Operator: <strong>{{ l.staff || 'Sys_Admin_Alpha' }}</strong></span>
+      </div>
+      
+      <div class="ledger-meta">
+        <span class="ledger-badge-status">SUCCESS</span>
+        <span class="ledger-time">{{ (l.timestamp?.seconds * 1000) | date:'shortTime' }}</span>
+      </div>
+      
+    </div>
+  </div>
+</section>
+
+</div>
+</div>
 
         <div *ngIf="currentTab === 'records'" class="tab-content-wrapper">
           <section class="bento-card unified-full-card">
@@ -216,8 +222,11 @@ import { DataService } from '../../services/data';
                     <th>Assistance Track / Payout</th>
                   </tr>
                 </thead>
+                <div style="margin-bottom: 16px; width: 100%;">
+                 <input type="text" [(ngModel)]="searchQuery" placeholder="🔍 Search profiles by name or ID..." class="system-input" style="width: 600%; padding: 10px; border-radius: 6px;">
+                </div>
                 <tbody *ngIf="residents$ | async as residentsList">
-                  <tr *ngFor="let r of residentsList">
+                  <tr *ngFor="let r of filterResidents(sortLatestFirst(residentsList))">
                     <td class="record-name-cell">
                       <span class="table-primary-text">👤 {{ r.fullName }}</span>
                       <code class="table-sub-code">ID: {{ r.id }}</code>
@@ -422,24 +431,24 @@ import { DataService } from '../../services/data';
             </div>
             
             <div class="custom-table-container editable-schedule-list">
-              <div *ngFor="let sch of systemSchedules; let idx = index" class="table-row-item editable-row">
-                <div class="editable-schedule-inputs-group">
-                  <div class="input-field-wrapper">
-                    <label class="field-label">Event Name</label>
-                    <input type="text" [(ngModel)]="sch.title" class="system-input tight-input">
-                  </div>
-                  <div class="input-field-wrapper">
-                    <label class="field-label">Dispatch Location Node</label>
-                    <input type="text" [(ngModel)]="sch.location" class="system-input tight-input">
-                  </div>
-                  <div class="input-field-wrapper">
-                    <label class="field-label">Target Release Timeline</label>
-                    <input type="text" [(ngModel)]="sch.date" class="system-input tight-input">
-                  </div>
-                </div>
-                <button class="settings-inline-btn delete-btn" (click)="removeSchedule(idx)">Remove</button>
-              </div>
-            </div>
+  <div *ngFor="let sch of systemSchedules; let idx = index" class="table-row-item editable-row">
+    <div class="editable-schedule-inputs-group">
+      <div class="input-field-wrapper">
+        <label class="field-label">Event Name</label>
+        <input type="text" [(ngModel)]="sch.title" class="system-input tight-input">
+      </div>
+      <div class="input-field-wrapper">
+        <label class="field-label">Dispatch Location</label>
+        <input type="text" [(ngModel)]="sch.location" class="system-input tight-input">
+      </div>
+      <div class="input-field-wrapper">
+        <label class="field-label">Timeline</label>
+        <input type="text" [(ngModel)]="sch.date" class="system-input tight-input">
+      </div>
+    </div>
+    <button class="settings-inline-btn delete-btn" (click)="removeSchedule(idx)">Remove</button>
+  </div>
+</div>
           </section>
         </div>
 
@@ -688,6 +697,9 @@ export class DashboardComponent implements OnInit {
   residents$ = this.ds.getResidents();
   logs$ = this.ds.getLogs();
 
+  searchQuery: string = '';
+  currentUserRole: string = 'Staff';
+
   isDark = true;
   currentTab = 'dashboard'; 
   
@@ -700,6 +712,8 @@ export class DashboardComponent implements OnInit {
 
   announcementScope = 'All';
   announcementText = '';
+  announcementType = '';
+  scheduledTime = '';
 
   newProfile: any = { 
     fullName: '', contact: '', tier: 'Tier 2', birthDate: '', gender: 'Female',
@@ -715,10 +729,7 @@ export class DashboardComponent implements OnInit {
   newAccountName = '';
   newAccountRole = 'Staff';
 
-  systemSchedules = [
-    { title: '📦 General Subsidy Allocation Event', location: 'Brgy Hall', date: 'May 15, 2026' },
-    { title: '🩺 Medical Care Subsidy Distribution', location: 'Regional Office 1 Dispatch Room', date: 'June 02, 2026' }
-  ];
+  systemSchedules: any[] = [];
 
   detailedStaffProfiles = [
     { fullName: 'Administrator', username: 'Admin_Alpha', assignedNode: 'Regional Office 1', clearance: 'Level 5 Root Authority' },
@@ -740,6 +751,52 @@ export class DashboardComponent implements OnInit {
     }
   }
 
+  filterResidents(list: any[] | null): any[] {
+   if (!list) return [];
+   if (!this.searchQuery.trim()) return list;
+  const query = this.searchQuery.toLowerCase();
+  return list.filter(res => 
+    res.fullName?.toLowerCase().includes(query) || 
+    res.id?.toLowerCase().includes(query)
+  );
+  }
+  
+sortLatestFirst(list: any[] | null): any[] {
+  if (!list || list.length === 0) return [];
+
+  // Create a safe copy of the list so we don't freeze the original array
+  const copy = [...list];
+
+  // 1. FIRST TRY: Sort by timestamp if it exists
+ if (copy[0] && copy[0].timestamp && typeof copy[0].timestamp === 'object' && 'seconds' in copy[0].timestamp) {
+    return copy.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+  }
+
+  if (copy[0] && 'createdAt' in copy[0]) {
+    return copy.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
+  // 2. SECOND TRY: If IDs are numbers (like 1, 2, 3), sort by highest ID first
+  const firstId = copy[0]?.id;
+  if (firstId && !isNaN(Number(firstId))) {
+    return copy.sort((a, b) => Number(b.id) - Number(a.id));
+  }
+
+  // 3. THIRD TRY: If IDs are text strings (like Firebase keys), sort them textually
+  if (firstId && typeof firstId === 'string') {
+    return copy.sort((a, b) => b.id.localeCompare(a.id));
+  }
+
+  // 4. ULTIMATE FALLBACK: Just flip the database order completely
+  return copy.reverse();
+}
+
+  editProfile(resident: any): void {
+    if (!resident) return;
+    this.newProfile = { ...resident }; 
+    this.currentTab = 'registration'; 
+  }
+
   countClass(list: any[] | null, targetClass: string): number {
     if (!list) return 0;
     return list.filter(item => item.classification === targetClass).length;
@@ -758,12 +815,12 @@ export class DashboardComponent implements OnInit {
 
   selectStaff(index: number): void { this.selectedStaffIndex = index; }
   addBlankSchedule(): void {
-    this.systemSchedules.unshift({
-      title: 'New Subsidy Event Pipeline',
-      location: 'Unassigned Terminal Node',
-      date: 'Select Timeline Date'
-    });
-  }
+  this.systemSchedules.unshift({
+    title: '',      // Leaves input blank so the HTML placeholder/ghost text works
+    location: '',
+    date: ''        // Empty string ready for the date-time picker
+  });
+}
   removeSchedule(index: number): void { this.systemSchedules.splice(index, 1); }
 
   manageAccountAction(account: any, type: string) {
@@ -805,33 +862,99 @@ export class DashboardComponent implements OnInit {
   }
 
   async submitAnnouncement(): Promise<void> {
-    if (!this.announcementText.trim()) return;
+    // 1. Validation check: Ensure they filled out the message and the new event type
+    if (!this.announcementText.trim() || !this.announcementType.trim()) {
+      alert('Please enter both an Event Type and a Message Payload.');
+      return;
+    }
+
     try {
       if (typeof (this.ds as any).addNotification === 'function') {
-        await (this.ds as any).addNotification(`[Broadcast - ${this.announcementScope}] ${this.announcementText}`);
+        // 2. Format the time display if they picked a date, otherwise default to "Immediate"
+        const timeDisplay = this.scheduledTime ? ` Scheduled: ${this.scheduledTime}` : ' [Immediate]';
+        
+        // 3. Construct the clean message string that your notification bell will read
+        const formattedMessage = `[Broadcast - ${this.announcementScope}] (${this.announcementType}) ${this.announcementText}${timeDisplay}`;
+        
+        // 4. Send it directly to your notification bell service
+        await (this.ds as any).addNotification(formattedMessage);
       }
+
+      // 5. Clear out all the text inputs so they go back to the ghost text placeholders
       this.announcementText = '';
+      this.announcementType = '';
+      this.scheduledTime = '';
+      
       alert('Broadcast Announcement Transmitted.');
-    } catch (e: any) { alert(`Error: ${e.message}`); }
+    } catch (e: any) { 
+      alert(`Error: ${e.message}`); 
+    }
   }
 
   async registerBeneficiary(): Promise<void> {
-    if (!this.newProfile.fullName.trim()) {
-      alert('Error: Legal Identity Full Name field cannot be left blank.');
-      return;
-    }
-    try {
-      if (typeof (this.ds as any).addResident === 'function') {
-        await (this.ds as any).addResident(this.newProfile);
-      }
-      this.newProfile = { 
-        fullName: '', contact: '', tier: 'Tier 2', birthDate: '', gender: 'Female',
-        civilStatus: 'Single', classification: 'Standard Resident', monthlyIncome: null,
-        region: '', province: '', municipality: '', barangay: ''
-      };
-      alert('Profile Enrolled Successfully into Core System Repositories.');
-    } catch (e: any) { alert(`Error: ${e.message}`); }
+  if (!this.newProfile.fullName.trim()) {
+    alert('Error: Legal Identity Full Name field cannot be left blank.');
+    return;
   }
+
+  // 1. FETCH LATEST RECORDS FOR DUPLICATE CHECKING
+  let currentResidents: any[] = [];
+  try {
+    currentResidents = await new Promise<any[]>((resolve) => {
+      const sub = (this.ds as any).getResidents().subscribe((data: any) => {
+        resolve(data || []);
+        sub.unsubscribe();
+      });
+    });
+  } catch (err) {
+    currentResidents = [];
+  }
+
+  // 2. SMART DUPLICATE CHECK (Ignores checking the person against themselves if editing)
+  const isDuplicate = currentResidents.some((res: any) => 
+    res.id !== this.newProfile.id && // 👈 Crucial: Skips matching its own existing record ID
+    res.fullName?.toLowerCase().trim() === this.newProfile.fullName.toLowerCase().trim()
+  );
+
+  if (isDuplicate) {
+    alert('🚨 Registration Blocked: A record with this exact name already exists.');
+    return;
+  }
+
+  // 3. SMART SAVE (Decides whether to ADD or UPDATE)
+  try {
+    if (this.newProfile.id) {
+      // 📝 OPTION A: If an ID exists, we are UPDATING an old record
+      if (typeof (this.ds as any).updateResident === 'function') {
+        await (this.ds as any).updateResident(this.newProfile);
+      } else if (typeof (this.ds as any).editResident === 'function') {
+        await (this.ds as any).editResident(this.newProfile);
+      }
+      alert('Profile Updated Successfully in Core System Repositories.');
+
+    } else {
+      // ➕ OPTION B: If NO ID exists, we are ADDING a brand new record
+      if (typeof (this.ds as any).addResident === 'function') {
+        const profileWithTimestamp = { 
+          ...this.newProfile, 
+          createdAt: new Date().getTime() 
+        };
+        await (this.ds as any).addResident(profileWithTimestamp);
+      }
+      alert('Profile Enrolled Successfully into Core System Repositories.');
+    }
+
+    // Clear the form fields back to empty defaults when done
+    this.newProfile = { 
+      fullName: '', contact: '', tier: 'Tier 2', birthDate: '', gender: 'Female',
+      civilStatus: 'Single', classification: 'Standard Resident', monthlyIncome: null,
+      region: '', province: '', municipality: '', barangay: ''
+    };
+    
+  } catch (e: any) { 
+    alert(`Error: ${e.message}`); 
+  }
+}
 
   handleLogout(): void {
     if (confirm('Terminate session and log out?')) {
