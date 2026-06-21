@@ -73,15 +73,24 @@ import { Observable } from 'rxjs';
           <div class="header-actions">
             <div class="notification-bell-wrapper" (click)="toggleNotifications()">
               <span class="bell-icon">🔔</span>
-              <span class="bell-badge" *ngIf="unreadNotificationsCount > 0">
+              <span class="bell-badge" *ngIf="systemNotifications.length > 0">
                 {{ unreadNotificationsCount }}
               </span>
               
               <div class="notifications-dropdown" *ngIf="showNotificationsDropdown" (click)="$event.stopPropagation()">
                 <div class="dropdown-header">System Notifications</div>
                 <div class="dropdown-body">
-                  <p class="empty-dropdown-text">No new broadcast notifications flagged.</p>
-                </div>
+  <ng-container *ngFor="let note of systemNotifications">
+    <div class="note-item">
+      <p>{{note.message}}</p>
+    </div>
+  </ng-container>
+
+  <p class="empty-dropdown-text" *ngIf="systemNotifications.length == 0">
+    No new broadcast notifications flagged.
+  </p>
+</div>
+
               </div>
             </div>
 
@@ -435,15 +444,15 @@ import { Observable } from 'rxjs';
     <div class="editable-schedule-inputs-group">
       <div class="input-field-wrapper">
         <label class="field-label">Event Name</label>
-        <input type="text" [(ngModel)]="sch.title" class="system-input tight-input">
+        <input type="text" [(ngModel)]="eventName" placeholder="Type of the event">
       </div>
       <div class="input-field-wrapper">
         <label class="field-label">Dispatch Location</label>
-        <input type="text" [(ngModel)]="sch.location" class="system-input tight-input">
+        <input type="text" [(ngModel)]="eventLocation" placeholder="Location of the event">
       </div>
       <div class="input-field-wrapper">
         <label class="field-label">Timeline</label>
-        <input type="text" [(ngModel)]="sch.date" class="system-input tight-input">
+        <input type="text" [(ngModel)]="eventTimeline" placeholder="Date and time of the event">
       </div>
     </div>
     <button class="settings-inline-btn delete-btn" (click)="removeSchedule(idx)">Remove</button>
@@ -697,15 +706,20 @@ export class DashboardComponent implements OnInit {
   residents$ = this.ds.getResidents();
   logs$ = this.ds.getLogs();
 
+  eventName: string = '';
+  eventLocation: string = '';
+  eventTimeline: string = '';
+
   searchQuery: string = '';
   currentUserRole: string = 'Staff';
 
   isDark = true;
   currentTab = 'dashboard'; 
-  
-  showNotificationsDropdown = false;
-  unreadNotificationsCount = 2; 
 
+  systemNotifications: any[] = []; 
+  unreadNotificationsCount = 0;
+  showNotificationsDropdown = false;
+  
   selRes = '';
   amt = 0;
   method = 'Bank Transfer';
@@ -837,6 +851,7 @@ sortLatestFirst(list: any[] | null): any[] {
       }
     }
   }
+  
 
   provisionAccount() {
     if (!this.newAccountName.trim()) return;
@@ -862,34 +877,35 @@ sortLatestFirst(list: any[] | null): any[] {
   }
 
   async submitAnnouncement(): Promise<void> {
-    // 1. Validation check: Ensure they filled out the message and the new event type
-    if (!this.announcementText.trim() || !this.announcementType.trim()) {
-      alert('Please enter both an Event Type and a Message Payload.');
-      return;
-    }
-
-    try {
-      if (typeof (this.ds as any).addNotification === 'function') {
-        // 2. Format the time display if they picked a date, otherwise default to "Immediate"
-        const timeDisplay = this.scheduledTime ? ` Scheduled: ${this.scheduledTime}` : ' [Immediate]';
-        
-        // 3. Construct the clean message string that your notification bell will read
-        const formattedMessage = `[Broadcast - ${this.announcementScope}] (${this.announcementType}) ${this.announcementText}${timeDisplay}`;
-        
-        // 4. Send it directly to your notification bell service
-        await (this.ds as any).addNotification(formattedMessage);
-      }
-
-      // 5. Clear out all the text inputs so they go back to the ghost text placeholders
-      this.announcementText = '';
-      this.announcementType = '';
-      this.scheduledTime = '';
-      
-      alert('Broadcast Announcement Transmitted.');
-    } catch (e: any) { 
-      alert(`Error: ${e.message}`); 
-    }
+  if (!this.announcementText.trim() || !this.announcementType.trim()) {
+    alert('Please enter both an Event Type and a Message Payload.');
+    return;
   }
+
+  try {
+    if (typeof (this.ds as any).addNotification === 'function') {
+      const timeDisplay = this.scheduledTime ? ` Scheduled: ${this.scheduledTime}` : ' [Immediate]';
+      const formattedMessage = `[Broadcast - ${this.announcementScope}] (${this.announcementType}) ${this.announcementText}${timeDisplay}`;
+      
+      await (this.ds as any).addNotification(formattedMessage);
+
+      // --- ADD THESE TWO LINES HERE ---
+      // This updates the local array that your Header's *ngFor is looking at
+      this.systemNotifications.unshift({ message: formattedMessage, timestamp: new Date() });
+      // This tells your Header's bell badge to increment
+      this.unreadNotificationsCount = this.systemNotifications.length;
+      // --------------------------------
+    }
+
+    this.announcementText = '';
+    this.announcementType = '';
+    this.scheduledTime = '';
+    
+    alert('Broadcast Announcement Transmitted.');
+  } catch (e: any) { 
+    alert(`Error: ${e.message}`); 
+  }
+}
 
   async registerBeneficiary(): Promise<void> {
   if (!this.newProfile.fullName.trim()) {
