@@ -444,15 +444,15 @@ import { Observable } from 'rxjs';
     <div class="editable-schedule-inputs-group">
       <div class="input-field-wrapper">
         <label class="field-label">Event Name</label>
-        <input type="text" [(ngModel)]="eventName" placeholder="Type of the event">
+        <input type="text" [(ngModel)]="eventName" class="system-input" placeholder="Type of the event">
       </div>
       <div class="input-field-wrapper">
         <label class="field-label">Dispatch Location</label>
-        <input type="text" [(ngModel)]="eventLocation" placeholder="Location of the event">
+        <input type="text" [(ngModel)]="eventLocation" class="system-input" placeholder="Location of the event">
       </div>
       <div class="input-field-wrapper">
         <label class="field-label">Timeline</label>
-        <input type="text" [(ngModel)]="eventTimeline" placeholder="Date and time of the event">
+        <input type="date" [(ngModel)]="sch.eventTimeline" class="system-input">
       </div>
     </div>
     <button class="settings-inline-btn delete-btn" (click)="removeSchedule(idx)">Remove</button>
